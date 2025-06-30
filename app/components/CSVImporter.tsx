@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -7,7 +9,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Upload, Download, AlertCircle, CheckCircle, FileText, Trash2 } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Upload, Download, AlertCircle, CheckCircle, FileText, Trash2, FileUp } from "lucide-react"
 
 interface CSVImporterProps {
   onImportComplete: () => void
@@ -17,15 +20,32 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
   const [csvUrl, setCsvUrl] = useState(
     "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/DatosProduccion%28Hoja1%29-33bmaw0juHwe3o2tFYoX5i5CMxRaZd.csv",
   )
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [importMethod, setImportMethod] = useState<"url" | "file">("url")
   const [replaceExisting, setReplaceExisting] = useState(true)
   const [importStatus, setImportStatus] = useState<"idle" | "importing" | "success" | "error">("idle")
   const [importMessage, setImportMessage] = useState("")
   const [importResult, setImportResult] = useState<any>(null)
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === "text/csv") {
+      setCsvFile(file)
+    } else {
+      alert("Por favor selecciona un archivo CSV válido")
+    }
+  }
+
   const handleImport = async () => {
-    if (!csvUrl.trim()) {
+    if (importMethod === "url" && !csvUrl.trim()) {
       setImportStatus("error")
       setImportMessage("Por favor, ingresa la URL del archivo CSV")
+      return
+    }
+
+    if (importMethod === "file" && !csvFile) {
+      setImportStatus("error")
+      setImportMessage("Por favor, selecciona un archivo CSV")
       return
     }
 
@@ -33,18 +53,39 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
       setImportStatus("importing")
       setImportMessage("Procesando archivo CSV...")
 
-      const endpoint = replaceExisting ? "/api/products/clear-and-import" : "/api/products/import-csv"
+      let response
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          csvUrl: csvUrl.trim(),
-          clearExisting: replaceExisting,
-        }),
-      })
+      if (importMethod === "url") {
+        // Método por URL (actual)
+        const endpoint = replaceExisting ? "/api/products/clear-and-import" : "/api/products/import-csv"
+
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            csvUrl: csvUrl.trim(),
+            clearExisting: replaceExisting,
+          }),
+        })
+      } else {
+        // Método por archivo local
+        const csvData = await csvFile!.text()
+
+        const endpoint = replaceExisting ? "/api/products/clear-and-import-file" : "/api/products/import-csv-file"
+
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            csvData: csvData,
+            clearExisting: replaceExisting,
+          }),
+        })
+      }
 
       if (!response.ok) {
         throw new Error("Error en la importación")
@@ -59,7 +100,7 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
       onImportComplete()
     } catch (error) {
       setImportStatus("error")
-      setImportMessage("Error al importar los datos. Verifica la URL y el formato del archivo.")
+      setImportMessage("Error al importar los datos. Verifica el archivo y el formato.")
       console.error("Import error:", error)
     }
   }
@@ -69,6 +110,7 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
     setImportStatus("idle")
     setImportMessage("")
     setImportResult(null)
+    setCsvFile(null)
   }
 
   return (
@@ -81,20 +123,50 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div>
-            <Label htmlFor="csv-url">URL del archivo CSV</Label>
-            <Input
-              id="csv-url"
-              type="url"
-              placeholder="https://ejemplo.com/archivo.csv"
-              value={csvUrl}
-              onChange={(e) => setCsvUrl(e.target.value)}
-              disabled={importStatus === "importing"}
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Pega aquí la URL del archivo CSV con la nueva guía de producción
-            </p>
-          </div>
+          {/* Tabs para elegir método */}
+          <Tabs value={importMethod} onValueChange={(value) => setImportMethod(value as "url" | "file")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="url">Desde URL</TabsTrigger>
+              <TabsTrigger value="file">Subir Archivo</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="url" className="space-y-4">
+              <div>
+                <Label htmlFor="csv-url">URL del archivo CSV</Label>
+                <Input
+                  id="csv-url"
+                  type="url"
+                  placeholder="https://ejemplo.com/archivo.csv"
+                  value={csvUrl}
+                  onChange={(e) => setCsvUrl(e.target.value)}
+                  disabled={importStatus === "importing"}
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  Pega aquí la URL del archivo CSV con la nueva guía de producción
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="file" className="space-y-4">
+              <div>
+                <Label htmlFor="csv-file">Seleccionar archivo CSV</Label>
+                <Input
+                  id="csv-file"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  disabled={importStatus === "importing"}
+                  className="cursor-pointer"
+                />
+                {csvFile && (
+                  <p className="text-sm text-green-600 mt-1">
+                    ✅ Archivo seleccionado: {csvFile.name} ({Math.round(csvFile.size / 1024)} KB)
+                  </p>
+                )}
+                <p className="text-sm text-gray-500 mt-1">Selecciona tu archivo CSV local con los datos de productos</p>
+              </div>
+            </TabsContent>
+          </Tabs>
 
           <div className="flex items-center space-x-2">
             <Checkbox
@@ -174,7 +246,11 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
           <div className="flex space-x-2">
             <Button
               onClick={handleImport}
-              disabled={importStatus === "importing" || !csvUrl.trim()}
+              disabled={
+                importStatus === "importing" ||
+                (importMethod === "url" && !csvUrl.trim()) ||
+                (importMethod === "file" && !csvFile)
+              }
               className="flex items-center"
             >
               {importStatus === "importing" ? (
@@ -184,12 +260,16 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
                 </>
               ) : replaceExisting ? (
                 <>
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  {importMethod === "file" ? <FileUp className="h-4 w-4 mr-2" /> : <Trash2 className="h-4 w-4 mr-2" />}
                   Reemplazar Productos
                 </>
               ) : (
                 <>
-                  <Download className="h-4 w-4 mr-2" />
+                  {importMethod === "file" ? (
+                    <FileUp className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
                   Importar CSV
                 </>
               )}
@@ -202,19 +282,41 @@ export default function CSVImporter({ onImportComplete }: CSVImporterProps) {
             )}
           </div>
 
-          <div className="text-xs text-gray-500 space-y-1">
-            <p>
-              <strong>Formato de tu archivo CSV:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Columna 1: Código del producto</li>
-              <li>Columna 2: Nombre del artículo</li>
-              <li>Columna 3: Cantidad para 2 meses (se convertirá automáticamente a demanda mensual)</li>
-              <li>El sistema procesará automáticamente los ~320 productos</li>
-            </ul>
-            <p className="mt-2 text-green-600">
-              <strong>✅ Archivo detectado:</strong> DatosProduccion(Hoja1).csv con 320+ productos
-            </p>
+          {/* Información sobre el formato */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h4 className="font-medium text-blue-900 mb-2">📋 Formato requerido del CSV:</h4>
+            <div className="text-sm text-blue-800 space-y-2">
+              <div className="bg-white p-3 rounded border font-mono text-xs">
+                <div className="text-gray-600 mb-1">Ejemplo de archivo CSV:</div>
+                <div>CODIGO,ARTICULO,DEMANDA_MENSUAL</div>
+                <div>218,Mix de Semillas 250gr,45</div>
+                <div>116,Almendras Peladas 500gr,32</div>
+                <div>500,Nueces Mariposa 1kg,28</div>
+              </div>
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  <strong>Separador:</strong> Coma (,) o punto y coma (;) - se detecta automáticamente
+                </li>
+                <li>
+                  <strong>CODIGO:</strong> Código único del producto
+                </li>
+                <li>
+                  <strong>ARTICULO/NOMBRE:</strong> Nombre descriptivo del producto
+                </li>
+                <li>
+                  <strong>DEMANDA_MENSUAL/STOCK_MINIMO:</strong> Cantidad mínima requerida
+                </li>
+                <li>
+                  <strong>Opcionales:</strong> FORMATO, TIPO, SECTOR (se asignan automáticamente si no están)
+                </li>
+              </ul>
+              <div className="mt-3 p-2 bg-yellow-100 rounded border border-yellow-300">
+                <p className="text-yellow-800 text-xs">
+                  <strong>💡 Tip:</strong> El sistema detecta automáticamente las columnas y asigna sectores, formatos y
+                  tipos basándose en el nombre del producto.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>

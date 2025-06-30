@@ -1,12 +1,15 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { RefreshCw, Upload, AlertCircle, CheckCircle, TrendingUp, TrendingDown, ArrowRight } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { RefreshCw, Upload, AlertCircle, CheckCircle, TrendingUp, TrendingDown, ArrowRight, FileUp } from "lucide-react"
 
 interface StockUpdaterProps {
   onUpdateComplete: () => void
@@ -16,14 +19,31 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
   const [csvUrl, setCsvUrl] = useState(
     "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/StockActual%201%28Sheet%29-vHmUmZMUnVHRd110sjUibnqR15VHOb.csv",
   )
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [updateMethod, setUpdateMethod] = useState<"url" | "file">("url")
   const [updateStatus, setUpdateStatus] = useState<"idle" | "updating" | "success" | "error">("idle")
   const [updateMessage, setUpdateMessage] = useState("")
   const [updateResult, setUpdateResult] = useState<any>(null)
 
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file && file.type === "text/csv") {
+      setCsvFile(file)
+    } else {
+      alert("Por favor selecciona un archivo CSV válido")
+    }
+  }
+
   const handleStockUpdate = async () => {
-    if (!csvUrl.trim()) {
+    if (updateMethod === "url" && !csvUrl.trim()) {
       setUpdateStatus("error")
       setUpdateMessage("Por favor, ingresa la URL del archivo de stock")
+      return
+    }
+
+    if (updateMethod === "file" && !csvFile) {
+      setUpdateStatus("error")
+      setUpdateMessage("Por favor, selecciona un archivo CSV")
       return
     }
 
@@ -31,25 +51,53 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
       setUpdateStatus("updating")
       setUpdateMessage("Actualizando stock de productos...")
 
-      const response = await fetch("/api/products/update-stock", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          csvUrl: csvUrl.trim(),
-        }),
-      })
+      let csvData = ""
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Error en la actualización")
+      if (updateMethod === "url") {
+        // Método por URL (actual)
+        const response = await fetch("/api/products/update-stock", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            csvUrl: csvUrl.trim(),
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Error en la actualización")
+        }
+
+        const data = await response.json()
+        setUpdateResult(data.result)
+        setUpdateStatus("success")
+        setUpdateMessage(data.message)
+      } else {
+        // Método por archivo local
+        csvData = await csvFile!.text()
+
+        const response = await fetch("/api/products/update-stock-file", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            csvData: csvData,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Error en la actualización")
+        }
+
+        const data = await response.json()
+        setUpdateResult(data.result)
+        setUpdateStatus("success")
+        setUpdateMessage(data.message)
       }
-
-      const data = await response.json()
-      setUpdateResult(data.result)
-      setUpdateStatus("success")
-      setUpdateMessage(data.message)
 
       // Esperar un poco antes de refrescar para que la BD se actualice
       setTimeout(async () => {
@@ -58,9 +106,7 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
     } catch (error) {
       setUpdateStatus("error")
       setUpdateMessage(
-        error instanceof Error
-          ? error.message
-          : "Error al actualizar el stock. Verifica la URL y el formato del archivo.",
+        error instanceof Error ? error.message : "Error al actualizar el stock. Verifica el archivo y el formato.",
       )
       console.error("Stock update error:", error)
     }
@@ -70,6 +116,7 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
     setUpdateStatus("idle")
     setUpdateMessage("")
     setUpdateResult(null)
+    setCsvFile(null)
   }
 
   return (
@@ -82,20 +129,52 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div>
-            <Label htmlFor="stock-url">URL del archivo de stock actual</Label>
-            <Input
-              id="stock-url"
-              type="url"
-              placeholder="https://ejemplo.com/stock-actual.csv"
-              value={csvUrl}
-              onChange={(e) => setCsvUrl(e.target.value)}
-              disabled={updateStatus === "updating"}
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              Archivo CSV con códigos de productos y stock actual para actualización semanal
-            </p>
-          </div>
+          {/* Tabs para elegir método */}
+          <Tabs value={updateMethod} onValueChange={(value) => setUpdateMethod(value as "url" | "file")}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="url">Desde URL</TabsTrigger>
+              <TabsTrigger value="file">Subir Archivo</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="url" className="space-y-4">
+              <div>
+                <Label htmlFor="stock-url">URL del archivo de stock actual</Label>
+                <Input
+                  id="stock-url"
+                  type="url"
+                  placeholder="https://ejemplo.com/stock-actual.csv"
+                  value={csvUrl}
+                  onChange={(e) => setCsvUrl(e.target.value)}
+                  disabled={updateStatus === "updating"}
+                />
+                <p className="text-sm text-gray-500 mt-1">
+                  Archivo CSV con códigos de productos y stock actual para actualización semanal
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="file" className="space-y-4">
+              <div>
+                <Label htmlFor="stock-file">Seleccionar archivo CSV</Label>
+                <Input
+                  id="stock-file"
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileChange}
+                  disabled={updateStatus === "updating"}
+                  className="cursor-pointer"
+                />
+                {csvFile && (
+                  <p className="text-sm text-green-600 mt-1">
+                    ✅ Archivo seleccionado: {csvFile.name} ({Math.round(csvFile.size / 1024)} KB)
+                  </p>
+                )}
+                <p className="text-sm text-gray-500 mt-1">
+                  Selecciona tu archivo CSV local con los datos de stock actualizados
+                </p>
+              </div>
+            </TabsContent>
+          </Tabs>
 
           {updateMessage && (
             <Alert
@@ -199,7 +278,11 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
           <div className="flex space-x-2">
             <Button
               onClick={handleStockUpdate}
-              disabled={updateStatus === "updating" || !csvUrl.trim()}
+              disabled={
+                updateStatus === "updating" ||
+                (updateMethod === "url" && !csvUrl.trim()) ||
+                (updateMethod === "file" && !csvFile)
+              }
               className="flex items-center"
             >
               {updateStatus === "updating" ? (
@@ -209,7 +292,11 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
                 </>
               ) : (
                 <>
-                  <RefreshCw className="h-4 w-4 mr-2" />
+                  {updateMethod === "file" ? (
+                    <FileUp className="h-4 w-4 mr-2" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                  )}
                   Actualizar Stock
                 </>
               )}
@@ -222,22 +309,42 @@ export default function StockUpdater({ onUpdateComplete }: StockUpdaterProps) {
             )}
           </div>
 
-          <div className="text-xs text-gray-500 space-y-1">
-            <p>
-              <strong>Formato del archivo de stock:</strong>
-            </p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>Columna CÓDIGO: Código del producto (se normalizarán automáticamente los ceros iniciales)</li>
-              <li>Columna STOCK: Nuevo valor de stock</li>
-              <li>Solo se actualizará el stock, el resto de datos permanecen igual</li>
-              <li>Los productos no encontrados se reportarán pero no causarán errores</li>
-            </ul>
-            <p className="mt-2 text-blue-600">
-              <strong>🔧 Normalización automática:</strong> "000215" → "215", "000116" → "116"
-            </p>
-            <p className="text-green-600">
-              <strong>📋 Archivo detectado:</strong> StockActual con códigos y cantidades actuales
-            </p>
+          {/* Información sobre el formato */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h4 className="font-medium text-blue-900 mb-2">📋 Formato requerido del CSV:</h4>
+            <div className="text-sm text-blue-800 space-y-2">
+              <div className="bg-white p-3 rounded border font-mono text-xs">
+                <div className="text-gray-600 mb-1">Ejemplo de archivo CSV:</div>
+                <div>CODIGO,DESCRIPCION,PRECIO,COSTO,GANANCIA,MARGEN,STOCK</div>
+                <div>218,Mix de Semillas 250gr,850,400,450,52.94,28</div>
+                <div>116,Almendras Peladas 500gr,1200,600,600,50.00,45</div>
+                <div>500,Nueces Mariposa 1kg,2500,1200,1300,52.00,12</div>
+              </div>
+              <ul className="list-disc list-inside space-y-1">
+                <li>
+                  <strong>Separador:</strong> Coma (,) o punto y coma (;) - se detecta automáticamente
+                </li>
+                <li>
+                  <strong>Columna CODIGO:</strong> Código del producto (se normalizan automáticamente los ceros
+                  iniciales)
+                </li>
+                <li>
+                  <strong>Columna STOCK:</strong> Nueva cantidad de stock (debe ser numérica)
+                </li>
+                <li>
+                  <strong>Encabezados:</strong> Primera fila debe contener los nombres de las columnas
+                </li>
+                <li>
+                  <strong>Codificación:</strong> UTF-8 preferible
+                </li>
+              </ul>
+              <div className="mt-3 p-2 bg-yellow-100 rounded border border-yellow-300">
+                <p className="text-yellow-800 text-xs">
+                  <strong>💡 Tip:</strong> El sistema busca automáticamente las columnas "CODIGO" y "STOCK" sin importar
+                  su posición en el archivo.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       </CardContent>
