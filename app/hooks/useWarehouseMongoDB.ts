@@ -106,23 +106,45 @@ export function useWarehouseMongoDB() {
   // Actualizar producto
   const updateProduct = async (updatedProduct: Product) => {
     try {
+      console.log("Actualizando producto:", updatedProduct.codigo)
+
+      // 🔧 ARREGLO: Crear objeto limpio sin _id para la API
+      const productForAPI = {
+        codigo: updatedProduct.codigo,
+        name: updatedProduct.name,
+        sector_id: updatedProduct.sector_id,
+        quantity: updatedProduct.quantity,
+        format: updatedProduct.format,
+        type: updatedProduct.type,
+        min_stock: updatedProduct.min_stock,
+        monthly_demand: updatedProduct.monthly_demand,
+        total_demand: updatedProduct.total_demand,
+      }
+
+      console.log("Datos enviados a la API:", productForAPI)
+
       const response = await fetch(`/api/products/${updatedProduct.codigo}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(updatedProduct),
+        body: JSON.stringify(productForAPI),
       })
 
-      if (!response.ok) throw new Error("Error updating product")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Error updating product")
+      }
 
       const data = await response.json()
+      console.log("Producto actualizado exitosamente:", data.product)
 
       // Actualizar estado local
       setProducts((prev) => prev.map((product) => (product.codigo === updatedProduct.codigo ? data.product : product)))
     } catch (err) {
       console.error("Error updating product:", err)
-      setError("Error actualizando producto")
+      setError(err instanceof Error ? err.message : "Error actualizando producto")
+      throw err // Re-lanzar el error para que el componente pueda manejarlo
     }
   }
 

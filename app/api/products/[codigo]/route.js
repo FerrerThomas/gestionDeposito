@@ -24,7 +24,19 @@ export async function PUT(request, { params }) {
     const { codigo } = params
     const updateData = await request.json()
 
-    const product = await ProductService.updateProduct(codigo, updateData)
+    console.log("PUT request para producto:", codigo)
+    console.log("Datos recibidos:", updateData)
+
+    // 🔧 ARREGLO: Limpiar datos antes de enviar al servicio
+    const cleanUpdateData = { ...updateData }
+
+    // Remover campos que no deben actualizarse
+    delete cleanUpdateData._id
+    delete cleanUpdateData.created_at
+
+    console.log("Datos limpios para actualizar:", cleanUpdateData)
+
+    const product = await ProductService.updateProduct(codigo, cleanUpdateData)
 
     return NextResponse.json({ product })
   } catch (error) {
