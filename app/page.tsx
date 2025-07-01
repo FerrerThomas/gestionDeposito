@@ -176,12 +176,13 @@ export default function WarehouseManagement() {
           <div>
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-2">Productos a Envasar</h2>
-              <p className="text-gray-600">Gestiona productos que necesitan ser envasados</p>
+              <p className="text-gray-600">Gestiona productos que necesitan ser envasados y actualiza el stock</p>
             </div>
             <ProductsToPackage
               products={products}
               getLowStockProducts={getLowStockProducts}
               getStockDeficit={getStockDeficit}
+              onUpdateProduct={updateProduct}
               isLoading={isLoading}
             />
           </div>
