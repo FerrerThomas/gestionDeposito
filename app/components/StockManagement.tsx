@@ -21,10 +21,6 @@ export default function StockManagement({ onDataRefresh }: StockManagementProps)
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-gray-600 mb-6">
-            Administra la importación de nuevos productos y actualiza el stock existente de forma semanal.
-          </p>
-
           {/* Tabs para diferentes tipos de gestión de stock */}
           <Tabs defaultValue="import" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
